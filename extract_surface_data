@@ -1,0 +1,58 @@
+import os
+import xarray as xr
+# ------------------------------------------------------------
+# Extract surface-level variables from GCHP simulations for
+# sage, gfed, and noagri datasets and save to NetCDF files.
+# ------------------------------------------------------------
+
+# Paths
+result_dir = "E:/GCHP/"
+output_dir = "E:/GCHP/extracted_variables/"
+os.makedirs(output_dir, exist_ok=True)
+
+# Input file pattern
+file_pattern = 'GEOSChem.DefaultCollection.2017*_0000z.nc4'
+
+# Datasets
+datasets = {
+    "sage": xr.open_mfdataset(result_dir + 'SAGE_2017_14.4.0/' + file_pattern, combine='by_coords'),
+    "gfed": xr.open_mfdataset(result_dir + 'spinup_GCHP14.4.0/' + file_pattern, combine='by_coords'),
+    "noagri": xr.open_mfdataset(result_dir + 'No_agriBB14.4.0/' + file_pattern, combine='by_coords')
+}
+
+# Variables to extract
+variables_to_extract = [
+    "PM25", "AerMassBC", "AerMassNH4", "AerMassNIT", "TotalOA",
+    "AerMassSO4", "SpeciesConcVV_CO", "SpeciesConcVV_NO",
+    "SpeciesConcVV_NO2", "SpeciesConcVV_O3", "SpeciesConcVV_OH"
+]
+
+# Loop through datasets
+for dataset_name, ds in datasets.items():
+    print(f"\n🔧 Building dataset for: {dataset_name}")
+    surface_vars = {}
+
+    for var in variables_to_extract:
+        if var in ds.variables:
+            print(f"  📥 Extracting surface of {var}")
+            data = ds[var]
+            if "lev" in data.dims:
+                data_surface = data.isel(lev=0)
+            else:
+                data_surface = data
+            print(f"    Data shape for {var}: {data.shape}, surface shape: {data_surface.shape}")
+            surface_vars[var] = data_surface
+        else:
+            print(f"  ⚠️ Skipping {var} (not found in {dataset_name})")
+
+    # Create new dataset from surface-level variables
+    combined_ds = xr.Dataset(surface_vars)
+
+    # Save with compression
+    output_file = os.path.join(output_dir, f"{dataset_name}_surface_variables.nc")
+    encoding = {var: {"zlib": True, "complevel": 4} for var in combined_ds.data_vars}
+    combined_ds.to_netcdf(output_file, encoding=encoding)
+
+    print(f"✅ Saved combined surface dataset: {output_file}")
+
+print("\n🎉 All datasets saved with surface-level variables.")
