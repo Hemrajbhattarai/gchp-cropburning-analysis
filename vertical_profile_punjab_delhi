@@ -1,0 +1,68 @@
+import xarray as xr
+import os
+
+# -----------------------------------------------
+# Extract vertical profiles (lev preserved) for
+# PM2.5 and gas/aerosol species at Punjab & New Delhi
+# during post-monsoon season (Oct 25 – Nov 25, 2017)
+# -----------------------------------------------
+
+
+output_file = "E:/GCHP/extracted_variables/vertical_profiles_Oct25_Nov25.nc"
+
+# Coordinates
+sites = {
+    "punjab": {"lat": 30.2, "lon": 75.0},
+    "newdelhi": {"lat": 28.6, "lon": 77.2}
+}
+
+# Date range
+start_date = "2017-10-25"
+end_date = "2017-11-25"
+
+# Storage for final extracted data
+profile_data = {}
+
+# Loop through dataset (gfed, sage, noagri)
+for dataset_name, ds in datasets.items():
+    print(f"\n📦 Processing dataset: {dataset_name}")
+
+    # Time subset
+    ds = ds.sel(time=slice(start_date, end_date))
+
+    for var in variables_to_extract:
+        if var not in ds.variables:
+            print(f"⚠️ Skipping {var} (not in {dataset_name})")
+            continue
+
+        var_data = ds[var]
+
+        for site_name, coords in sites.items():
+            lat_pt = coords["lat"]
+            lon_pt = coords["lon"]
+
+            # Find nearest grid point
+            var_site = var_data.sel(
+                lat=lat_pt, lon=lon_pt, method="nearest"
+            )
+
+            # Take mean over time
+            var_mean = var_site.mean(dim="time")
+
+            # Drop lat/lon to avoid merge conflict
+            var_mean = var_mean.reset_coords(names=['lat', 'lon'], drop=True)
+
+            # Store with key like 'gfed_PM25_punjab'
+            key = f"{dataset_name}_{var}_{site_name}"
+            profile_data[key] = var_mean
+
+            print(f"✅ Extracted {key} (shape: {var_mean.shape})")
+
+# Combine all extracted profiles into one Dataset
+combined_profile_ds = xr.Dataset(profile_data)
+
+# Save to NetCDF
+encoding = {var: {"zlib": True, "complevel": 4} for var in combined_profile_ds.data_vars}
+combined_profile_ds.to_netcdf(output_file, encoding=encoding)
+
+print(f"\n🎉 Vertical profile data saved to: {output_file}")
